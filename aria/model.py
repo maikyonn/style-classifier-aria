@@ -1,7 +1,11 @@
 """Training implementation."""
 
+import transformers
+
+
 from dataclasses import dataclass
 from typing import Optional
+from transformers import BertForTokenClassification
 
 import torch
 import torch.utils.checkpoint
@@ -194,9 +198,7 @@ class TransformerLM(nn.Module):
 
         self.max_seq_len = model_config.max_seq_len
         self.model = Transformer(model_config)
-        self.lm_head = nn.Linear(
-            model_config.d_model, model_config.vocab_size, bias=False
-        )
+        self.lm_head = BertForTokenClassification.from_pretrained('bert-base-uncased').classifier
 
     def forward(
         self,
@@ -216,8 +218,10 @@ class TransformerLM(nn.Module):
             torch.tensor: Forward pass of src through Transformer and LM head.
                 Has shape (batch_size, seq_len, vocab_size).
         """
-        hidden = self.model(src)
+        hidden = self.model(src.transpose(1, 2))
+        hidden = hidden.transpose(1, 2)
         logits = self.lm_head(hidden)
+        logits = logits.view(-1, src.shape[1], logits.size(-1))
 
         return logits
 
