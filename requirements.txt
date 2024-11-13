@@ -6,3 +6,5 @@ pydub
 tqdm
 einops
 safetensors
+
+aria @ git+https://github.com/EleutherAI/aria.git

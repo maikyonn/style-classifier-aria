@@ -14,17 +14,20 @@ from torch.nn import functional as F
 
 @dataclass
 class ModelConfig:
+    """Model configuration class."""
+    vocab_size: int
     d_model: int
     n_heads: int
     n_layers: int
     ff_mult: int
     drop_p: float
     max_seq_len: int
-    grad_checkpoint: bool
-    vocab_size: Optional[int] = None
 
-    def set_vocab_size(self, vocab_size: int):
-        self.vocab_size = vocab_size
+
+    def __post_init__(self):
+        """Validate configuration parameters."""
+        assert self.d_model % self.n_heads == 0, "d_model must be divisible by n_heads"
+        assert self.drop_p >= 0 and self.drop_p <= 1, "drop_p must be between 0 and 1"
 
 
 class FusedEncoderBlock(nn.Module):
@@ -161,25 +164,8 @@ class Transformer(nn.Module):
             ).to(src.device)
         freqs_cis = self.freqs_cis[: src.shape[1]]
 
-        if self.model_config.grad_checkpoint is True:
-            for layer in self.encode_layers:
-
-                def create_custom_forward(module):
-                    def custom_forward(*args):
-                        return module(*args)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer),
-                    hidden_states,
-                    freqs_cis,
-                    preserve_rng_state=True,
-                    use_reentrant=True,
-                )
-        else:
-            for layer in self.encode_layers:
-                hidden_states = layer(hidden_states, freqs_cis=freqs_cis)
+        for layer in self.encode_layers:
+            hidden_states = layer(hidden_states, freqs_cis=freqs_cis)
 
         return self.out_layer_norm(hidden_states)
 

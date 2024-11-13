@@ -1,17 +1,13 @@
-
-
 import json
 import os
 import logging
-import functools
 from functools import partial
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 from typing import Callable, Iterable
+from tqdm.auto import tqdm
 from aria.tokenizer import Tokenizer
 from aria.data.midi import MidiDict
-from multiprocessing import Pool, get_start_method
-from progress.bar import Bar
-    
+
 def setup_logger():
     # Get logger and reset all handlers
     logger = logging.getLogger(__name__)
@@ -129,29 +125,47 @@ def load_midi_and_tokenize_multi(path, tokenizer, max_seq_len, overlap_token_amo
 
 
 def get_clean_midi_tokenize(path, tokenizer):
-    _midi_dict = MidiDict.from_midi(path)
-    seq = tokenizer.tokenize(_midi_dict)
-    pure_seq = []
-    for tok in seq:
-        if tok[0] in ['piano', 'onset', 'dur']:
-            pure_seq.extend(tokenizer.encode([tok]))
-    
-    return pure_seq
+    try:
+        _midi_dict = MidiDict.from_midi(path)
+        seq = tokenizer.tokenize(_midi_dict)
+        pure_seq = []
+        for tok in seq:
+            if tok[0] in ['piano', 'onset', 'dur']:
+                pure_seq.extend(tokenizer.encode([tok]))
+        return pure_seq
+    except Exception as e:
+        raise Exception(f"Error processing {path}: {str(e)}")
 
 def get_style_sequence(path, tokenizer):
-    with open(path, 'r') as file:
-        content = file.read()
-    
-    # Tokenize the content into a list of characters
-    tokens = list(content)
-    encoded_tokens = tokenizer.encode(tokens)
-    
-    return encoded_tokens
+    try:
+        with open(path, 'r') as file:
+            content = file.read()
+        tokens = list(content)
+        encoded_tokens = tokenizer.encode(tokens)
+        return encoded_tokens
+    except Exception as e:
+        raise Exception(f"Error processing {path}: {str(e)}")
 
+def process_file_pair(args, tokenizer):
+    """
+    Process a pair of MIDI and label files.
+    Moved outside build_dataset to make it picklable.
+    """
+    midi_file, label_file = args
+    try:
+        midi_seq = get_clean_midi_tokenize(midi_file, tokenizer)
+        style_seq = get_style_sequence(label_file, tokenizer)
+        
+        if len(midi_seq) != len(style_seq):
+            return None
+        return midi_seq, style_seq
+    except Exception as e:
+        return None
 
 def build_dataset(path, tokenizer):
     midi_sequences = []
     style_sequences = []
+    logger = setup_logger()
 
     # Define paths to midi and labels folders
     midi_folder = os.path.join(path, 'midi')
@@ -161,27 +175,40 @@ def build_dataset(path, tokenizer):
     midi_files = sorted([os.path.join(midi_folder, f) for f in os.listdir(midi_folder) if f.endswith('.mid')])
     label_files = sorted([os.path.join(labels_folder, f) for f in os.listdir(labels_folder) if f.endswith('.txt')])
 
-    # Ensure both lists have the same number of files
     if len(midi_files) != len(label_files):
         raise ValueError("Mismatch between number of MIDI and label files.")
 
-    # Process each pair of midi and label files
-    for midi_file, label_file in zip(midi_files, label_files):
-        midi_seq = get_clean_midi_tokenize(midi_file, tokenizer)
-        style_seq = get_style_sequence(label_file, tokenizer)
+    # Calculate optimal number of workers
+    num_workers = min(cpu_count(), 16)  # Cap at 16 workers
+    
+    print(f"\nProcessing {len(midi_files)} files using {num_workers} workers...")
+    
+    # Process files in parallel with progress bar
+    with Pool(num_workers) as pool:
+        # Use partial to pass the tokenizer to process_file_pair
+        process_func = partial(process_file_pair, tokenizer=tokenizer)
+        results = list(tqdm(
+            pool.imap(process_func, zip(midi_files, label_files)),
+            total=len(midi_files),
+            desc="Processing MIDI and label files",
+            unit="files"
+        ))
 
-        # Verify that the MIDI sequence and style sequence are of the same length
-        if len(midi_seq) != len(style_seq):
-            raise ValueError(f"Length mismatch between MIDI file {os.path.basename(midi_file)} and label file {os.path.basename(label_file)}.")
+    # Filter out None results and separate sequences
+    valid_results = [r for r in results if r is not None]
+    if valid_results:
+        midi_sequences, style_sequences = zip(*valid_results)
+    
+    print(f"\nSuccessfully processed {len(midi_sequences)} file pairs")
+    print(f"Skipped {len(midi_files) - len(midi_sequences)} files due to errors or length mismatches")
 
-        midi_sequences.append(midi_seq)
-        style_sequences.append(style_seq)
-
-    return midi_sequences, style_sequences
+    return list(midi_sequences), list(style_sequences)
 
 def chunk_sequences(sequences, max_len=1024, padding_value=0):
     chunked_sequences = []
-    for seq in sequences:
+    
+    # Process sequences with progress bar
+    for seq in tqdm(sequences, desc="Chunking sequences", unit="sequence"):
         # Chunk the sequence into pieces of max_len
         for i in range(0, len(seq), max_len):
             chunk = seq[i:i + max_len]
@@ -191,4 +218,6 @@ def chunk_sequences(sequences, max_len=1024, padding_value=0):
                 chunk += [padding_value] * (max_len - len(chunk))
                 
             chunked_sequences.append(chunk)
+    
+    print(f"Created {len(chunked_sequences)} chunks from {len(sequences)} sequences")
     return chunked_sequences
