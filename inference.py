@@ -26,19 +26,31 @@ def get_latest_run(runs_dir: str = 'runs') -> Path:
     if not runs:
         raise FileNotFoundError(f"No run directories found in '{runs_dir}'")
     
-    def parse_date(run_name):
+    def parse_date(run_path: Path) -> datetime:
+        # Extract the datetime part after 'run_'
+        date_str = run_path.name[4:]  # Remove 'run_' prefix
+        
         try:
-            # Try format: run_YYYYMMDD_HHMMSS
-            return datetime.strptime(run_name.split('_')[1], "%Y%m%d_%H%M%S")
+            # Try format: YYYYMMDD_HHMMSS
+            return datetime.strptime(date_str, "%Y%m%d_%H%M%S")
         except ValueError:
             try:
-                # Try format: run_YYYYMMDD
-                return datetime.strptime(run_name.split('_')[1], "%Y%m%d")
+                # Try format: YYYYMMDD
+                return datetime.strptime(date_str, "%Y%m%d")
             except ValueError:
+                print(f"Warning: Could not parse date from directory: {run_path.name}")
                 return datetime.min
+
+    # Sort runs by date and get the latest
+    sorted_runs = sorted(runs, key=parse_date, reverse=True)
+    latest_run = sorted_runs[0]
     
-    latest_run = max(runs, key=lambda x: parse_date(x.name))
-    print(f"\nUsing latest run: {latest_run}")
+    # Print all found runs for debugging
+    print("\nFound runs (sorted by date):")
+    for run in sorted_runs:
+        print(f"- {run.name} ({parse_date(run)})")
+    
+    print(f"\nSelected latest run: {latest_run}")
     return latest_run
 
 def get_best_checkpoint(run_dir: Path) -> Path:
