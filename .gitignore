@@ -2,7 +2,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+checkpoints/
+conda-env/
+batch_inference_results/
 wandb/
 runs/
 datasets/

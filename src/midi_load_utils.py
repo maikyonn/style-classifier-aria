@@ -204,20 +204,67 @@ def build_dataset(path, tokenizer):
 
     return list(midi_sequences), list(style_sequences)
 
-def chunk_sequences(sequences, max_len=1024, padding_value=0):
+def chunk_sequences(sequences, max_len=1024, padding_value=0, stride=32):
+    """
+    Chunk sequences into fixed-size windows with padding using sliding window.
+    Uses overlapping windows with specified stride (default: 32).
+    
+    Args:
+        sequences: List of sequences to chunk
+        max_len: Maximum length of each chunk
+        padding_value: Value to use for padding
+        stride: Number of tokens to shift window by (default: 32)
+    """
     chunked_sequences = []
     
     # Process sequences with progress bar
     for seq in tqdm(sequences, desc="Chunking sequences", unit="sequence"):
-        # Chunk the sequence into pieces of max_len
-        for i in range(0, len(seq), max_len):
-            chunk = seq[i:i + max_len]
+        # Create sliding windows with specified stride
+        for start_idx in range(0, len(seq), stride):  # Move window by stride tokens
+            # Get chunk of size max_len
+            chunk = seq[start_idx:start_idx + max_len]
             
-            # If the chunk is shorter than max_len, pad it
+            # Always pad to max_len
             if len(chunk) < max_len:
-                chunk += [padding_value] * (max_len - len(chunk))
-                
+                chunk = chunk + [padding_value] * (max_len - len(chunk))
+            
             chunked_sequences.append(chunk)
     
-    print(f"Created {len(chunked_sequences)} chunks from {len(sequences)} sequences")
+    print(f"Created {len(chunked_sequences)} chunks (stride={stride}) from {len(sequences)} sequences")
     return chunked_sequences
+
+def prepare_midi_for_inference(midi_path, max_len=512, tokenizer=None):
+    """
+    Load, tokenize and chunk a single MIDI file for inference using a sliding window.
+    
+    Args:
+        midi_path: Path to the MIDI file
+        max_len: Maximum length of each chunk (default: 512)
+        tokenizer: The AbsTokenizer instance
+        
+    Returns:
+        list: List of chunked sequences ready for inference
+        int: Stride size (1 for sliding window)
+    """
+    try:
+        # Get the MIDI tokens using the same tokenization as training
+        midi_seq = get_clean_midi_tokenize(midi_path, tokenizer)
+        
+        # Create chunks with sliding window (stride=1)
+        chunks = []
+        stride = 1  # Shift by 1 token at a time
+        
+        # For each possible window start position
+        for start_idx in range(0, len(midi_seq)):
+            # Get chunk of size max_len, pad if needed
+            chunk = midi_seq[start_idx:start_idx + max_len]
+            if len(chunk) < max_len:
+                chunk = chunk + [tokenizer.encode(["<P>"])[0]] * (max_len - len(chunk))
+            chunks.append(chunk)
+            
+        print(f"Created {len(chunks)} chunks using sliding window from MIDI file: {midi_path}")
+        return chunks, stride
+        
+    except Exception as e:
+        raise Exception(f"Error processing {midi_path}: {str(e)}")
+
