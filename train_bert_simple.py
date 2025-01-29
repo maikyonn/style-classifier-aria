@@ -42,6 +42,17 @@ class MidiClassifier(pl.LightningModule):
         # BERT model
         self.model = BertModel.from_pretrained('bert-large-uncased')
         
+        # Reset BERT model weights
+        def init_weights(module):
+            if isinstance(module, (torch.nn.Linear, torch.nn.Embedding)):
+                module.weight.data.normal_(mean=0.0, std=0.02)
+                if isinstance(module, torch.nn.Linear) and module.bias is not None:
+                    module.bias.data.zero_()
+            elif isinstance(module, torch.nn.LayerNorm):
+                module.bias.data.zero_()
+                module.weight.data.fill_(1.0)
+
+        self.model.apply(init_weights)
         # Ensure BERT is in training mode
         self.model.train()
         
