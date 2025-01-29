@@ -146,10 +146,12 @@ def get_style_sequence(path, tokenizer):
     except Exception as e:
         raise Exception(f"Error processing {path}: {str(e)}")
 
+# src/midi_load_utils.py
+
 def process_file_pair(args, tokenizer):
     """
     Process a pair of MIDI and label files.
-    Moved outside build_dataset to make it picklable.
+    Returns (midi_seq, style_seq) or None if error/mismatch.
     """
     midi_file, label_file = args
     try:
@@ -161,6 +163,7 @@ def process_file_pair(args, tokenizer):
         return midi_seq, style_seq
     except Exception as e:
         return None
+
 
 def build_dataset(path, tokenizer):
     midi_sequences = []
@@ -204,7 +207,7 @@ def build_dataset(path, tokenizer):
 
     return list(midi_sequences), list(style_sequences)
 
-def chunk_sequences(sequences, max_len=1024, padding_value=0, stride=32):
+def chunk_sequences(sequences, max_len=1024, padding_value=0, stride=512):
     """
     Chunk sequences into fixed-size windows with padding using sliding window.
     Uses overlapping windows with specified stride (default: 32).

@@ -32,6 +32,10 @@ os.makedirs("./wandb-local", exist_ok=True)
 # Set float32 matmul precision to medium for better performance
 torch.set_float32_matmul_precision('medium')
 
+os.environ["WANDB_CACHE_DIR"] = "./wandb-cache"
+os.environ["WANDB_DIR"] = "./wandb-local"
+os.makedirs("./wandb-cache", exist_ok=True)
+os.makedirs("./wandb-local", exist_ok=True)
 
 class MidiClassifier(pl.LightningModule):
     def __init__(
@@ -403,7 +407,7 @@ def main(args):
 
     early_stopping = EarlyStopping(
         monitor='val_loss',
-        patience=5,
+        patience=20,
         mode='min',
         min_delta=1e-4,
         verbose=True
@@ -442,14 +446,14 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, required=True, help='Path to data directory')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size per GPU')
     parser.add_argument('--epochs', type=int, default=20, help='Number of training epochs')
-    parser.add_argument('--lr', type=float, default=1e-5, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--devices', type=int, default=4, help='Number of GPUs to use per node')
     parser.add_argument('--num_workers', type=int, default=32, help='Number of dataloader workers')
     parser.add_argument('--max_length', type=int, default=512, help='Maximum sequence length')
     parser.add_argument('--n_classes', type=int, default=4, help='Number of classification classes')
     parser.add_argument('--num_nodes', type=int, default=1, help='Number of nodes to use')
     parser.add_argument('--node_rank', type=int, default=0, help='Rank of this node')
-    parser.add_argument('--dropout_rate', type=float, default=0.3, help='Dropout rate for regularization')
+    parser.add_argument('--dropout_rate', type=float, default=0.2, help='Dropout rate for regularization')
     parser.add_argument('--wandb_project', type=str, default='midi-style-classifier', help='WandB project name')
     parser.add_argument('--wandb_name', type=str, default=None, help='WandB run name')
 

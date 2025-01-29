@@ -17,4 +17,4 @@ source activate /project/jonmay_1426/spangher/Projects/style-classifier-aria/con
 cd /project/jonmay_1426/spangher/Projects/style-classifier-aria
 
 export OMP_NUM_THREADS=16
-python train_bert.py --data_dir datasets/varied-forms-4k-collapsed --epochs 50
+python train_bert.py --data_dir datasets/varied-forms-4k-collapsed --epochs 100

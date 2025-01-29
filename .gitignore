@@ -8,6 +8,7 @@ batch_inference_results/
 wandb/
 runs/
 datasets/
+wandb-cache/
 
 # C extensions
 *.so
